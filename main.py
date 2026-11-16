@@ -23,7 +23,8 @@ TEXTS = {
         "copy_logs": "Скопировать логи", "logs_copied": "Логи скопированы!",
         "clear_data": "Очистить все данные", "confirm_del": "Удалить запись?", "yes": "Да", "no": "Нет",
         "filter_all": "Все", "filter_today": "Сегодня", "filter_week": "Неделя", "filter_month": "Месяц",
-        "confirm_clear": "Вы уверены, что хотите удалить ВСЕ данные? Это действие нельзя отменить."
+        "confirm_clear": "Вы уверены, что хотите удалить ВСЕ данные? Это действие нельзя отменить.",
+        "support_btn": "Написать в поддержку", "support_copied": "Ссылка на Telegram скопирована! Напишите нам."
     },
     "en": {
         "app_title": "LifeTrack", "habits": "Habits", "notes": "Notes", "finance": "Finance", "info": "Info",
@@ -40,7 +41,8 @@ TEXTS = {
         "copy_logs": "Copy logs", "logs_copied": "Logs copied!",
         "clear_data": "Clear all data", "confirm_del": "Delete record?", "yes": "Yes", "no": "No",
         "filter_all": "All", "filter_today": "Today", "filter_week": "Week", "filter_month": "Month",
-        "confirm_clear": "Are you sure you want to delete ALL data? This cannot be undone."
+        "confirm_clear": "Are you sure you want to delete ALL data? This cannot be undone.",
+        "support_btn": "Contact Support", "support_copied": "Telegram link copied! Write to us."
     }
 }
 
@@ -86,7 +88,6 @@ def main(page: ft.Page):
             "expenses": state["expenses"]
         })
 
-    # --- ДИАЛОГИ (Flet 1.0) ---
     def close_dialog(dialog):
         dialog.open = False
         page.update()
@@ -260,11 +261,11 @@ def main(page: ft.Page):
             is_income = (type_radio.value == "income")
             final_amount = amount if not is_income else -amount
             state["expenses"].append({
-                "id": str(datetime.datetime.now().timestamp()), # Уникальный ID
+                "id": str(datetime.datetime.now().timestamp()),
                 "name": exp_name_input.value, 
                 "amount": final_amount,
                 "cat": exp_category.value,
-                "date": datetime.datetime.now().strftime("%Y-%m-%d"), # Полная дата
+                "date": datetime.datetime.now().strftime("%Y-%m-%d"),
                 "is_income": is_income
             })
             exp_name_input.value = ""
@@ -288,13 +289,11 @@ def main(page: ft.Page):
         for item in state["expenses"]:
             item_date = None
             try:
-                # Пробуем распарсить полную дату
                 item_date = datetime.datetime.strptime(item["date"], "%Y-%m-%d").date()
             except:
-                # Если дата старая (без года), фильтруем её только в режиме "Все"
                 if state["filter"] != "all":
                     continue
-                item_date = today # Для отображения
+                item_date = today
             
             if state["filter"] == "today" and item_date != today: continue
             if state["filter"] == "week" and (today - item_date).days > 7: continue
@@ -322,11 +321,7 @@ def main(page: ft.Page):
             is_inc = item.get("is_income", False)
             color = ft.Colors.GREEN_400 if is_inc else ft.Colors.RED_400
             prefix = "+" if is_inc else "-"
-            
-            # Показываем только ДД.ММ, если дата полная
             date_str = item["date"][5:] if len(item["date"]) > 5 else item["date"]
-            
-            # Безопасное удаление
             item_id = item.get("id", "")
             
             finance_col.controls.append(
@@ -375,6 +370,12 @@ def main(page: ft.Page):
         page.snack_bar.open = True
         page.update()
 
+    async def copy_support(e):
+        await ft.Clipboard().set("https://t.me/makas_ik")
+        page.snack_bar = ft.SnackBar(content=ft.Text(TEXTS[state["lang"]]["support_copied"], color=ft.Colors.WHITE), bgcolor=ft.Colors.BLUE_800)
+        page.snack_bar.open = True
+        page.update()
+
     def confirm_clear(e):
         def on_yes(e):
             state["habits"] = []
@@ -397,6 +398,10 @@ def main(page: ft.Page):
         dialog.open = True
         page.update()
 
+    btn_copy_logs = ft.Button(TEXTS[state["lang"]]["copy_logs"], icon=ft.Icons.BUG_REPORT, on_click=lambda e: page.run_task(copy_logs, e), bgcolor=ft.Colors.GREY_700, color=ft.Colors.WHITE)
+    btn_support = ft.Button(TEXTS[state["lang"]]["support_btn"], icon=ft.Icons.SUPPORT_AGENT, on_click=lambda e: page.run_task(copy_support, e), bgcolor=ft.Colors.BLUE_700, color=ft.Colors.WHITE)
+    btn_clear = ft.Button(TEXTS[state["lang"]]["clear_data"], icon=ft.Icons.DELETE_FOREVER, on_click=confirm_clear, bgcolor=ft.Colors.RED_700, color=ft.Colors.WHITE)
+
     tab_info = ft.Column([
         ft.Icon(ft.Icons.PERSON, size=80),
         ft.Text("Евгений (makas)", size=22, weight=ft.FontWeight.BOLD),
@@ -411,8 +416,11 @@ def main(page: ft.Page):
         ft.Text(TEXTS[state["lang"]]["gh"], size=14, color=ft.Colors.GREY_500),
         ft.Text("https://github.com/makas-innnn", size=16, color=ft.Colors.BLUE_400, weight=ft.FontWeight.BOLD),
         ft.Divider(height=20, color="transparent"),
-        ft.Button(TEXTS[state["lang"]]["copy_logs"], icon=ft.Icons.BUG_REPORT, on_click=lambda e: page.run_task(copy_logs, e), bgcolor=ft.Colors.GREY_700, color=ft.Colors.WHITE),
-        ft.Button(TEXTS[state["lang"]]["clear_data"], icon=ft.Icons.DELETE_FOREVER, on_click=confirm_clear, bgcolor=ft.Colors.RED_700, color=ft.Colors.WHITE)
+        btn_copy_logs,
+        ft.Divider(height=10, color="transparent"),
+        btn_support,
+        ft.Divider(height=10, color="transparent"),
+        btn_clear
     ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, scroll=ft.ScrollMode.AUTO, expand=True)
 
     # --- НАВИГАЦИЯ ---
