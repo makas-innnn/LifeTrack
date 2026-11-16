@@ -3,6 +3,7 @@ import json
 import datetime
 import platform
 import os
+import asyncio
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_FILE = os.path.join(BASE_DIR, "lifetrack_data.json")
@@ -24,7 +25,7 @@ TEXTS = {
         "clear_data": "Очистить все данные", "confirm_del": "Удалить запись?", "yes": "Да", "no": "Нет",
         "filter_all": "Все", "filter_today": "Сегодня", "filter_week": "Неделя", "filter_month": "Месяц",
         "confirm_clear": "Вы уверены, что хотите удалить ВСЕ данные? Это действие нельзя отменить.",
-        "support_btn": "Написать в поддержку", "support_copied": "Ссылка на Telegram скопирована! Напишите нам."
+        "support_btn": "Написать в поддержку", "support_copied": "✅ Скопировано!"
     },
     "en": {
         "app_title": "LifeTrack", "habits": "Habits", "notes": "Notes", "finance": "Finance", "info": "Info",
@@ -42,7 +43,7 @@ TEXTS = {
         "clear_data": "Clear all data", "confirm_del": "Delete record?", "yes": "Yes", "no": "No",
         "filter_all": "All", "filter_today": "Today", "filter_week": "Week", "filter_month": "Month",
         "confirm_clear": "Are you sure you want to delete ALL data? This cannot be undone.",
-        "support_btn": "Contact Support", "support_copied": "Telegram link copied! Write to us."
+        "support_btn": "Contact Support", "support_copied": "✅ Copied!"
     }
 }
 
@@ -269,201 +270,3 @@ def main(page: ft.Page):
                 "is_income": is_income
             })
             exp_name_input.value = ""
-            exp_amount_input.value = ""
-            update_finance_ui()
-            save_data()
-            page.update()
-
-    def delete_expense_by_id(item_id):
-        state["expenses"] = [x for x in state["expenses"] if x.get("id") != item_id]
-        update_finance_ui()
-        save_data()
-        page.update()
-
-    def update_finance_ui():
-        finance_col.controls.clear()
-        
-        filtered_expenses = []
-        today = datetime.date.today()
-        
-        for item in state["expenses"]:
-            item_date = None
-            try:
-                item_date = datetime.datetime.strptime(item["date"], "%Y-%m-%d").date()
-            except:
-                if state["filter"] != "all":
-                    continue
-                item_date = today
-            
-            if state["filter"] == "today" and item_date != today: continue
-            if state["filter"] == "week" and (today - item_date).days > 7: continue
-            if state["filter"] == "month" and (today - item_date).days > 30: continue
-            filtered_expenses.append(item)
-
-        balance = -sum(item["amount"] for item in filtered_expenses)
-        balance_text.value = f"{TEXTS[state['lang']]['balance']} {balance:.2f} ₽"
-        
-        if balance < 0: balance_text.color = ft.Colors.RED_400
-        elif balance > 0: balance_text.color = ft.Colors.GREEN_400
-        else: balance_text.color = ft.Colors.WHITE
-
-        expenses_only = [item for item in filtered_expenses if not item.get("is_income", False)]
-        if expenses_only:
-            cats = {}
-            for item in expenses_only:
-                cats[item["cat"]] = cats.get(item["cat"], 0) + abs(item["amount"])
-            top_cat = max(cats, key=cats.get)
-            top_cat_text.value = f"{TEXTS[state['lang']]['top_cat']} {top_cat}"
-        else:
-            top_cat_text.value = ""
-
-        for item in reversed(filtered_expenses):
-            is_inc = item.get("is_income", False)
-            color = ft.Colors.GREEN_400 if is_inc else ft.Colors.RED_400
-            prefix = "+" if is_inc else "-"
-            date_str = item["date"][5:] if len(item["date"]) > 5 else item["date"]
-            item_id = item.get("id", "")
-            
-            finance_col.controls.append(
-                ft.Row([
-                    ft.Column([
-                        ft.Text(item["name"], size=14, weight=ft.FontWeight.BOLD),
-                        ft.Text(f'{item["cat"]} • {date_str}', size=12, color=ft.Colors.GREY_400)
-                    ], expand=True),
-                    ft.Text(f"{prefix}{abs(item['amount'])} ₽", size=14, color=color),
-                    ft.IconButton(
-                        ft.Icons.DELETE, 
-                        icon_size=16, 
-                        icon_color=ft.Colors.RED_400, 
-                        on_click=lambda e, iid=item_id: confirm_delete(lambda _: delete_expense_by_id(iid), None)
-                    )
-                ])
-            )
-
-    tab_finance = ft.Column([
-        ft.Text("💰 Финансы", size=24, weight=ft.FontWeight.BOLD),
-        balance_text,
-        top_cat_text,
-        filter_buttons,
-        ft.Divider(),
-        exp_name_input,
-        ft.Row([exp_amount_input, exp_category]),
-        type_radio,
-        ft.Button(TEXTS[state["lang"]]["save"], on_click=add_expense, bgcolor=ft.Colors.GREEN_600, color=ft.Colors.WHITE),
-        ft.Divider(),
-        finance_col
-    ], scroll=ft.ScrollMode.AUTO, expand=True)
-
-    # --- ВКЛАДКА 4: ИНФО ---
-    async def copy_logs(e):
-        sys_info = (
-            f"--- LifeTrack Logs ---\n"
-            f"Date: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
-            f"OS: {platform.system()} {platform.release()}\n"
-            f"Python: {platform.python_version()}\n"
-            f"Lang: {state['lang']}, Theme: {state['theme']}\n"
-            f"Habits: {len(state['habits'])}, Notes: {len(state['notes'])}, Expenses: {len(state['expenses'])}\n"
-            f"----------------------"
-        )
-        await ft.Clipboard().set(sys_info)
-        page.snack_bar = ft.SnackBar(content=ft.Text(TEXTS[state["lang"]]["logs_copied"], color=ft.Colors.WHITE), bgcolor=ft.Colors.GREEN_800)
-        page.snack_bar.open = True
-        page.update()
-
-    async def copy_support(e):
-        await ft.Clipboard().set("https://t.me/makas_ik")
-        page.snack_bar = ft.SnackBar(content=ft.Text(TEXTS[state["lang"]]["support_copied"], color=ft.Colors.WHITE), bgcolor=ft.Colors.BLUE_800)
-        page.snack_bar.open = True
-        page.update()
-
-    def confirm_clear(e):
-        def on_yes(e):
-            state["habits"] = []
-            state["notes"] = []
-            state["expenses"] = []
-            save_data()
-            update_habits_ui()
-            update_notes_ui()
-            update_finance_ui()
-            close_dialog(dialog)
-
-        dialog = ft.AlertDialog(
-            title=ft.Text(TEXTS[state["lang"]]["confirm_clear"]),
-            actions=[
-                ft.TextButton(TEXTS[state["lang"]]["yes"], on_click=on_yes),
-                ft.TextButton(TEXTS[state["lang"]]["no"], on_click=lambda e: close_dialog(dialog))
-            ]
-        )
-        page.overlay.append(dialog)
-        dialog.open = True
-        page.update()
-
-    btn_copy_logs = ft.Button(TEXTS[state["lang"]]["copy_logs"], icon=ft.Icons.BUG_REPORT, on_click=lambda e: page.run_task(copy_logs, e), bgcolor=ft.Colors.GREY_700, color=ft.Colors.WHITE)
-    btn_support = ft.Button(TEXTS[state["lang"]]["support_btn"], icon=ft.Icons.SUPPORT_AGENT, on_click=lambda e: page.run_task(copy_support, e), bgcolor=ft.Colors.BLUE_700, color=ft.Colors.WHITE)
-    btn_clear = ft.Button(TEXTS[state["lang"]]["clear_data"], icon=ft.Icons.DELETE_FOREVER, on_click=confirm_clear, bgcolor=ft.Colors.RED_700, color=ft.Colors.WHITE)
-
-    tab_info = ft.Column([
-        ft.Icon(ft.Icons.PERSON, size=80),
-        ft.Text("Евгений (makas)", size=22, weight=ft.FontWeight.BOLD),
-        ft.Text(TEXTS[state["lang"]]["about_me"], size=16, color=ft.Colors.GREY_400),
-        ft.Divider(height=15, color="transparent"),
-        ft.Text(TEXTS[state["lang"]]["tg_channel"], size=14, color=ft.Colors.GREY_500),
-        ft.Text("https://t.me/makas_1337", size=16, color=ft.Colors.BLUE_400, weight=ft.FontWeight.BOLD),
-        ft.Divider(height=10, color="transparent"),
-        ft.Text(TEXTS[state["lang"]]["tg_dm"], size=14, color=ft.Colors.GREY_500),
-        ft.Text("https://t.me/makas_ik", size=16, color=ft.Colors.BLUE_400, weight=ft.FontWeight.BOLD),
-        ft.Divider(height=10, color="transparent"),
-        ft.Text(TEXTS[state["lang"]]["gh"], size=14, color=ft.Colors.GREY_500),
-        ft.Text("https://github.com/makas-innnn", size=16, color=ft.Colors.BLUE_400, weight=ft.FontWeight.BOLD),
-        ft.Divider(height=20, color="transparent"),
-        btn_copy_logs,
-        ft.Divider(height=10, color="transparent"),
-        btn_support,
-        ft.Divider(height=10, color="transparent"),
-        btn_clear
-    ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, scroll=ft.ScrollMode.AUTO, expand=True)
-
-    # --- НАВИГАЦИЯ ---
-    content_container = ft.Container(expand=True, content=tab_habits)
-
-    def switch_tab(index):
-        if index == 0: content_container.content = tab_habits
-        elif index == 1: content_container.content = tab_notes
-        elif index == 2: content_container.content = tab_finance
-        else: content_container.content = tab_info
-        page.update()
-
-    nav_bar = ft.NavigationBar(
-        selected_index=0,
-        destinations=[
-            ft.NavigationBarDestination(icon=ft.Icons.HOME, label=TEXTS[state["lang"]]["habits"]),
-            ft.NavigationBarDestination(icon=ft.Icons.NOTE, label=TEXTS[state["lang"]]["notes"]),
-            ft.NavigationBarDestination(icon=ft.Icons.MONEY, label=TEXTS[state["lang"]]["finance"]),
-            ft.NavigationBarDestination(icon=ft.Icons.INFO, label=TEXTS[state["lang"]]["info"]),
-        ],
-        on_change=lambda e: switch_tab(e.control.selected_index)
-    )
-
-    def toggle_theme(e):
-        themes = list(THEMES.keys())
-        idx = themes.index(state["theme"])
-        state["theme"] = themes[(idx + 1) % len(themes)]
-        t = THEMES[state["theme"]]
-        page.bgcolor = t["bg"]
-        page.appbar.bgcolor = t["card"]
-        page.update()
-
-    page.appbar = ft.AppBar(
-        title=ft.Text(TEXTS[state["lang"]]["app_title"]),
-        center_title=True,
-        actions=[ft.IconButton(ft.Icons.PALETTE, on_click=toggle_theme)]
-    )
-
-    page.navigation_bar = nav_bar
-    page.add(content_container)
-    
-    update_habits_ui()
-    update_notes_ui()
-    update_finance_ui()
-
-ft.run(main)
