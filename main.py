@@ -2,6 +2,11 @@ import flet as ft
 import json
 import datetime
 import platform
+import os
+
+# --- БЕЗОПАСНЫЙ ПУТЬ ДЛЯ СОХРАНЕНИЯ ---
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DATA_FILE = os.path.join(BASE_DIR, "lifetrack_data.json")
 
 TEXTS = {
     "ru": {
@@ -41,28 +46,39 @@ THEMES = {
     "forest": {"bg": ft.Colors.GREEN_900, "card": ft.Colors.GREEN_800}
 }
 
+def load_data():
+    if os.path.exists(DATA_FILE):
+        try:
+            with open(DATA_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except: pass
+    return {"habits": [], "notes": [], "expenses": []}
+
+def save_data_to_file(data):
+    try:
+        with open(DATA_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+    except: pass
+
 def main(page: ft.Page):
     page.title = "LifeTrack"
     page.padding = 20
     page.theme_mode = ft.ThemeMode.DARK
 
-    state = {"lang": "ru", "theme": "dark", "habits": [], "notes": [], "expenses": []}
-
-    try:
-        saved = page.client_storage.get("lifetrack_data")
-        if saved:
-            data = json.loads(saved)
-            state["habits"] = data.get("habits", [])
-            state["notes"] = data.get("notes", [])
-            state["expenses"] = data.get("expenses", [])
-    except: pass
+    loaded_data = load_data()
+    state = {
+        "lang": "ru", "theme": "dark", 
+        "habits": loaded_data.get("habits", []), 
+        "notes": loaded_data.get("notes", []), 
+        "expenses": loaded_data.get("expenses", [])
+    }
 
     def save_data():
-        try:
-            page.client_storage.set("lifetrack_data", json.dumps({
-                "habits": state["habits"], "notes": state["notes"], "expenses": state["expenses"]
-            }))
-        except: pass
+        save_data_to_file({
+            "habits": state["habits"], 
+            "notes": state["notes"], 
+            "expenses": state["expenses"]
+        })
 
     # --- ВКЛАДКА 1: ПРИВЫЧКИ ---
     habits_col = ft.Column(spacing=10)
@@ -207,9 +223,11 @@ def main(page: ft.Page):
             return
         if amount > 0:
             is_income = (type_radio.value == "income")
+            # Теперь храним доходы как положительные числа, а расходы как отрицательные
+            final_amount = amount if not is_income else -amount
             state["expenses"].append({
                 "name": exp_name_input.value, 
-                "amount": amount if not is_income else -amount,
+                "amount": final_amount,
                 "cat": exp_category.value,
                 "date": datetime.datetime.now().strftime("%d.%m"),
                 "is_income": is_income
@@ -228,19 +246,22 @@ def main(page: ft.Page):
 
     def update_finance_ui():
         finance_col.controls.clear()
-        balance = sum(item["amount"] for item in state["expenses"])
+        # Сумма всех значений (доходы с минусом, расходы с плюсом - так мы получаем правильный баланс)
+        balance = -sum(item["amount"] for item in state["expenses"])
         balance_text.value = f"{TEXTS[state['lang']]['balance']} {balance:.2f} ₽"
         
         if balance < 0:
+            balance_text.color = ft.Colors.RED_400
+        elif balance > 0:
             balance_text.color = ft.Colors.GREEN_400
         else:
-            balance_text.color = ft.Colors.WHITE if balance == 0 else ft.Colors.RED_400
+            balance_text.color = ft.Colors.WHITE
 
         expenses_only = [item for item in state["expenses"] if not item.get("is_income", False)]
         if expenses_only:
             cats = {}
             for item in expenses_only:
-                cats[item["cat"]] = cats.get(item["cat"], 0) + item["amount"]
+                cats[item["cat"]] = cats.get(item["cat"], 0) + abs(item["amount"])
             top_cat = max(cats, key=cats.get)
             top_cat_text.value = f"{TEXTS[state['lang']]['top_cat']} {top_cat}"
         else:
