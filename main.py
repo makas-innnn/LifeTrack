@@ -4,7 +4,6 @@ import datetime
 import platform
 import os
 
-# --- БЕЗОПАСНЫЙ ПУТЬ ДЛЯ СОХРАНЕНИЯ ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_FILE = os.path.join(BASE_DIR, "lifetrack_data.json")
 
@@ -21,7 +20,10 @@ TEXTS = {
         "top_cat": "Больше всего потрачено на:",
         "about_me": "Начинающий кодер, делаю что в кайф",
         "tg_channel": "Телеграм-канал:", "tg_dm": "Связь (ЛС):", "gh": "GitHub:",
-        "copy_logs": "Скопировать логи для разработчика", "logs_copied": "Логи скопированы! Отправьте их разработчику."
+        "copy_logs": "Скопировать логи", "logs_copied": "Логи скопированы!",
+        "clear_data": "Очистить все данные", "confirm_del": "Удалить запись?", "yes": "Да", "no": "Нет",
+        "filter_all": "Все", "filter_today": "Сегодня", "filter_week": "Неделя", "filter_month": "Месяц",
+        "confirm_clear": "Вы уверены, что хотите удалить ВСЕ данные? Это действие нельзя отменить."
     },
     "en": {
         "app_title": "LifeTrack", "habits": "Habits", "notes": "Notes", "finance": "Finance", "info": "Info",
@@ -30,12 +32,15 @@ TEXTS = {
         "income_name": "Source of income?", "income_amount": "Amount",
         "type_income": "Income", "type_expense": "Expense",
         "cat_food": "Food", "cat_transport": "Transport", "cat_fun": "Fun", 
-        "cat_bad": "Bad habits", "cat_other": "Other", "cat_salary": "Salary", "cat_gift": "Gift",
+        "cat_bad": "Bad", "cat_other": "Other", "cat_salary": "Salary", "cat_gift": "Gift",
         "save": "Add", "delete": "Delete", "balance": "Balance:",
         "top_cat": "Most spent on:",
         "about_me": "Beginner coder, doing what I love",
         "tg_channel": "Telegram channel:", "tg_dm": "Contact (DM):", "gh": "GitHub:",
-        "copy_logs": "Copy logs for developer", "logs_copied": "Logs copied! Send them to the developer."
+        "copy_logs": "Copy logs", "logs_copied": "Logs copied!",
+        "clear_data": "Clear all data", "confirm_del": "Delete record?", "yes": "Yes", "no": "No",
+        "filter_all": "All", "filter_today": "Today", "filter_week": "Week", "filter_month": "Month",
+        "confirm_clear": "Are you sure you want to delete ALL data? This cannot be undone."
     }
 }
 
@@ -70,7 +75,8 @@ def main(page: ft.Page):
         "lang": "ru", "theme": "dark", 
         "habits": loaded_data.get("habits", []), 
         "notes": loaded_data.get("notes", []), 
-        "expenses": loaded_data.get("expenses", [])
+        "expenses": loaded_data.get("expenses", []),
+        "filter": "all"
     }
 
     def save_data():
@@ -79,6 +85,27 @@ def main(page: ft.Page):
             "notes": state["notes"], 
             "expenses": state["expenses"]
         })
+
+    # --- ДИАЛОГИ (Flet 1.0) ---
+    def close_dialog(dialog):
+        dialog.open = False
+        page.update()
+
+    def confirm_delete(callback, item):
+        def on_yes(e):
+            callback(item)
+            close_dialog(dialog)
+        
+        dialog = ft.AlertDialog(
+            title=ft.Text(TEXTS[state["lang"]]["confirm_del"]),
+            actions=[
+                ft.TextButton(TEXTS[state["lang"]]["yes"], on_click=on_yes),
+                ft.TextButton(TEXTS[state["lang"]]["no"], on_click=lambda e: close_dialog(dialog))
+            ]
+        )
+        page.overlay.append(dialog)
+        dialog.open = True
+        page.update()
 
     # --- ВКЛАДКА 1: ПРИВЫЧКИ ---
     habits_col = ft.Column(spacing=10)
@@ -95,20 +122,18 @@ def main(page: ft.Page):
     def toggle_habit(index):
         h = state["habits"][index]
         today = datetime.datetime.now().strftime("%Y-%m-%d")
-        
         if h["last_done"] == today:
             h["last_done"] = ""
             h["streak"] = max(0, h["streak"] - 1)
         else:
             h["last_done"] = today
             h["streak"] += 1
-            
         update_habits_ui()
         save_data()
         page.update()
 
-    def delete_habit(index):
-        state["habits"].pop(index)
+    def delete_habit(item):
+        state["habits"].remove(item)
         update_habits_ui()
         save_data()
         page.update()
@@ -116,7 +141,6 @@ def main(page: ft.Page):
     def update_habits_ui():
         habits_col.controls.clear()
         today = datetime.datetime.now().strftime("%Y-%m-%d")
-        
         for i, h in enumerate(state["habits"]):
             is_done = (h["last_done"] == today)
             habits_col.controls.append(
@@ -127,7 +151,7 @@ def main(page: ft.Page):
                         ft.Text(f'Создано: {h["date"]}', size=10, color=ft.Colors.GREY_500)
                     ], expand=True),
                     ft.Text(f'🔥 {h["streak"]}', size=14, color=ft.Colors.ORANGE_400),
-                    ft.IconButton(ft.Icons.DELETE, icon_size=16, icon_color=ft.Colors.RED_400, on_click=lambda e, i=i: delete_habit(i))
+                    ft.IconButton(ft.Icons.DELETE, icon_size=16, icon_color=ft.Colors.RED_400, on_click=lambda e, h=h: confirm_delete(delete_habit, h))
                 ])
             )
 
@@ -154,23 +178,22 @@ def main(page: ft.Page):
             save_data()
             page.update()
 
-    def delete_note(index):
-        state["notes"].pop(index)
+    def delete_note(item):
+        state["notes"].remove(item)
         update_notes_ui()
         save_data()
         page.update()
 
     def update_notes_ui():
         notes_col.controls.clear()
-        for i, n in enumerate(reversed(state["notes"])):
-            real_index = len(state["notes"]) - 1 - i
+        for n in reversed(state["notes"]):
             notes_col.controls.append(
                 ft.Container(
                     content=ft.Column([
                         ft.Row([
                             ft.Text(n["title"], size=16, weight=ft.FontWeight.BOLD, expand=True),
                             ft.Text(n["date"], size=12, color=ft.Colors.GREY_500),
-                            ft.IconButton(ft.Icons.DELETE, icon_size=16, icon_color=ft.Colors.RED_400, on_click=lambda e, i=real_index: delete_note(i))
+                            ft.IconButton(ft.Icons.DELETE, icon_size=16, icon_color=ft.Colors.RED_400, on_click=lambda e, n=n: confirm_delete(delete_note, n))
                         ]),
                         ft.Text(n["text"], size=14, color=ft.Colors.GREY_400)
                     ]),
@@ -216,6 +239,18 @@ def main(page: ft.Page):
         value=TEXTS[state["lang"]]["cat_food"]
     )
 
+    def set_filter(f):
+        state["filter"] = f
+        update_finance_ui()
+        page.update()
+
+    filter_buttons = ft.Row([
+        ft.Button(TEXTS[state["lang"]]["filter_all"], on_click=lambda e: set_filter("all")),
+        ft.Button(TEXTS[state["lang"]]["filter_today"], on_click=lambda e: set_filter("today")),
+        ft.Button(TEXTS[state["lang"]]["filter_week"], on_click=lambda e: set_filter("week")),
+        ft.Button(TEXTS[state["lang"]]["filter_month"], on_click=lambda e: set_filter("month")),
+    ], scroll=ft.ScrollMode.AUTO)
+
     def add_expense(e):
         try:
             amount = float(exp_amount_input.value)
@@ -223,13 +258,13 @@ def main(page: ft.Page):
             return
         if amount > 0:
             is_income = (type_radio.value == "income")
-            # Теперь храним доходы как положительные числа, а расходы как отрицательные
             final_amount = amount if not is_income else -amount
             state["expenses"].append({
+                "id": str(datetime.datetime.now().timestamp()), # Уникальный ID
                 "name": exp_name_input.value, 
                 "amount": final_amount,
                 "cat": exp_category.value,
-                "date": datetime.datetime.now().strftime("%d.%m"),
+                "date": datetime.datetime.now().strftime("%Y-%m-%d"), # Полная дата
                 "is_income": is_income
             })
             exp_name_input.value = ""
@@ -238,26 +273,42 @@ def main(page: ft.Page):
             save_data()
             page.update()
 
-    def delete_expense(index):
-        state["expenses"].pop(index)
+    def delete_expense_by_id(item_id):
+        state["expenses"] = [x for x in state["expenses"] if x.get("id") != item_id]
         update_finance_ui()
         save_data()
         page.update()
 
     def update_finance_ui():
         finance_col.controls.clear()
-        # Сумма всех значений (доходы с минусом, расходы с плюсом - так мы получаем правильный баланс)
-        balance = -sum(item["amount"] for item in state["expenses"])
+        
+        filtered_expenses = []
+        today = datetime.date.today()
+        
+        for item in state["expenses"]:
+            item_date = None
+            try:
+                # Пробуем распарсить полную дату
+                item_date = datetime.datetime.strptime(item["date"], "%Y-%m-%d").date()
+            except:
+                # Если дата старая (без года), фильтруем её только в режиме "Все"
+                if state["filter"] != "all":
+                    continue
+                item_date = today # Для отображения
+            
+            if state["filter"] == "today" and item_date != today: continue
+            if state["filter"] == "week" and (today - item_date).days > 7: continue
+            if state["filter"] == "month" and (today - item_date).days > 30: continue
+            filtered_expenses.append(item)
+
+        balance = -sum(item["amount"] for item in filtered_expenses)
         balance_text.value = f"{TEXTS[state['lang']]['balance']} {balance:.2f} ₽"
         
-        if balance < 0:
-            balance_text.color = ft.Colors.RED_400
-        elif balance > 0:
-            balance_text.color = ft.Colors.GREEN_400
-        else:
-            balance_text.color = ft.Colors.WHITE
+        if balance < 0: balance_text.color = ft.Colors.RED_400
+        elif balance > 0: balance_text.color = ft.Colors.GREEN_400
+        else: balance_text.color = ft.Colors.WHITE
 
-        expenses_only = [item for item in state["expenses"] if not item.get("is_income", False)]
+        expenses_only = [item for item in filtered_expenses if not item.get("is_income", False)]
         if expenses_only:
             cats = {}
             for item in expenses_only:
@@ -267,20 +318,30 @@ def main(page: ft.Page):
         else:
             top_cat_text.value = ""
 
-        for i, item in enumerate(reversed(state["expenses"])):
-            real_index = len(state["expenses"]) - 1 - i
+        for item in reversed(filtered_expenses):
             is_inc = item.get("is_income", False)
             color = ft.Colors.GREEN_400 if is_inc else ft.Colors.RED_400
             prefix = "+" if is_inc else "-"
+            
+            # Показываем только ДД.ММ, если дата полная
+            date_str = item["date"][5:] if len(item["date"]) > 5 else item["date"]
+            
+            # Безопасное удаление
+            item_id = item.get("id", "")
             
             finance_col.controls.append(
                 ft.Row([
                     ft.Column([
                         ft.Text(item["name"], size=14, weight=ft.FontWeight.BOLD),
-                        ft.Text(f'{item["cat"]} • {item["date"]}', size=12, color=ft.Colors.GREY_400)
+                        ft.Text(f'{item["cat"]} • {date_str}', size=12, color=ft.Colors.GREY_400)
                     ], expand=True),
                     ft.Text(f"{prefix}{abs(item['amount'])} ₽", size=14, color=color),
-                    ft.IconButton(ft.Icons.DELETE, icon_size=16, icon_color=ft.Colors.RED_400, on_click=lambda e, i=real_index: delete_expense(i))
+                    ft.IconButton(
+                        ft.Icons.DELETE, 
+                        icon_size=16, 
+                        icon_color=ft.Colors.RED_400, 
+                        on_click=lambda e, iid=item_id: confirm_delete(lambda _: delete_expense_by_id(iid), None)
+                    )
                 ])
             )
 
@@ -288,6 +349,7 @@ def main(page: ft.Page):
         ft.Text("💰 Финансы", size=24, weight=ft.FontWeight.BOLD),
         balance_text,
         top_cat_text,
+        filter_buttons,
         ft.Divider(),
         exp_name_input,
         ft.Row([exp_amount_input, exp_category]),
@@ -297,22 +359,42 @@ def main(page: ft.Page):
         finance_col
     ], scroll=ft.ScrollMode.AUTO, expand=True)
 
-    # --- ВКЛАДКА 4: ИНФО + ЛОГИ ---
+    # --- ВКЛАДКА 4: ИНФО ---
     async def copy_logs(e):
         sys_info = (
             f"--- LifeTrack Logs ---\n"
             f"Date: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
             f"OS: {platform.system()} {platform.release()}\n"
             f"Python: {platform.python_version()}\n"
-            f"Processor: {platform.processor()}\n"
             f"Lang: {state['lang']}, Theme: {state['theme']}\n"
             f"Habits: {len(state['habits'])}, Notes: {len(state['notes'])}, Expenses: {len(state['expenses'])}\n"
-            f"----------------------\n"
-            "Скопируйте этот текст и отправьте разработчику."
+            f"----------------------"
         )
         await ft.Clipboard().set(sys_info)
         page.snack_bar = ft.SnackBar(content=ft.Text(TEXTS[state["lang"]]["logs_copied"], color=ft.Colors.WHITE), bgcolor=ft.Colors.GREEN_800)
         page.snack_bar.open = True
+        page.update()
+
+    def confirm_clear(e):
+        def on_yes(e):
+            state["habits"] = []
+            state["notes"] = []
+            state["expenses"] = []
+            save_data()
+            update_habits_ui()
+            update_notes_ui()
+            update_finance_ui()
+            close_dialog(dialog)
+
+        dialog = ft.AlertDialog(
+            title=ft.Text(TEXTS[state["lang"]]["confirm_clear"]),
+            actions=[
+                ft.TextButton(TEXTS[state["lang"]]["yes"], on_click=on_yes),
+                ft.TextButton(TEXTS[state["lang"]]["no"], on_click=lambda e: close_dialog(dialog))
+            ]
+        )
+        page.overlay.append(dialog)
+        dialog.open = True
         page.update()
 
     tab_info = ft.Column([
@@ -329,13 +411,8 @@ def main(page: ft.Page):
         ft.Text(TEXTS[state["lang"]]["gh"], size=14, color=ft.Colors.GREY_500),
         ft.Text("https://github.com/makas-innnn", size=16, color=ft.Colors.BLUE_400, weight=ft.FontWeight.BOLD),
         ft.Divider(height=20, color="transparent"),
-        ft.Button(
-            TEXTS[state["lang"]]["copy_logs"], 
-            icon=ft.Icons.BUG_REPORT, 
-            on_click=lambda e: page.run_task(copy_logs, e), 
-            bgcolor=ft.Colors.GREY_700, 
-            color=ft.Colors.WHITE
-        ),
+        ft.Button(TEXTS[state["lang"]]["copy_logs"], icon=ft.Icons.BUG_REPORT, on_click=lambda e: page.run_task(copy_logs, e), bgcolor=ft.Colors.GREY_700, color=ft.Colors.WHITE),
+        ft.Button(TEXTS[state["lang"]]["clear_data"], icon=ft.Icons.DELETE_FOREVER, on_click=confirm_clear, bgcolor=ft.Colors.RED_700, color=ft.Colors.WHITE)
     ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, scroll=ft.ScrollMode.AUTO, expand=True)
 
     # --- НАВИГАЦИЯ ---
