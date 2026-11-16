@@ -1,37 +1,44 @@
 import flet as ft
 import json
 import datetime
+import platform
 
 TEXTS = {
     "ru": {
         "app_title": "LifeTrack", "habits": "Привычки", "notes": "Заметки", "finance": "Финансы", "info": "Инфо",
-        "add_habit": "Добавить привычку", "habit_name": "Название привычки...",
-        "add_note": "Добавить заметку", "note_title": "Заголовок", "note_text": "Текст заметки...",
-        "add_expense": "Добавить расход", "expense_name": "На что потратил?", "expense_amount": "Сумма (₽)",
-        "categories": "Категория", "cat_food": "Еда", "cat_transport": "Транспорт", "cat_fun": "Развлечения", 
-        "cat_bad": "Вредное (алкоголь/сигареты)", "cat_other": "Другое",
-        "save": "Сохранить", "delete": "Удалить", "total": "Всего потрачено:",
+        "habit_name": "Название привычки...", "note_title": "Заголовок", "note_text": "Текст заметки...",
+        "expense_name": "На что потратил?", "expense_amount": "Сумма",
+        "income_name": "Откуда доход?", "income_amount": "Сумма",
+        "type_income": "Доход", "type_expense": "Расход",
+        "cat_food": "Еда", "cat_transport": "Транспорт", "cat_fun": "Развлечения", 
+        "cat_bad": "Вредное", "cat_other": "Другое", "cat_salary": "Зарплата", "cat_gift": "Подарок",
+        "save": "Добавить", "delete": "Удалить", "balance": "Баланс:",
+        "top_cat": "Больше всего потрачено на:",
         "about_me": "Начинающий кодер, делаю что в кайф",
-        "tg_channel": "Телеграм-канал:", "tg_dm": "Связь (ЛС):", "gh": "GitHub:"
+        "tg_channel": "Телеграм-канал:", "tg_dm": "Связь (ЛС):", "gh": "GitHub:",
+        "copy_logs": "Скопировать логи для разработчика", "logs_copied": "Логи скопированы! Отправьте их разработчику."
     },
     "en": {
         "app_title": "LifeTrack", "habits": "Habits", "notes": "Notes", "finance": "Finance", "info": "Info",
-        "add_habit": "Add habit", "habit_name": "Habit name...",
-        "add_note": "Add note", "note_title": "Title", "note_text": "Note text...",
-        "add_expense": "Add expense", "expense_name": "What for?", "expense_amount": "Amount",
-        "categories": "Category", "cat_food": "Food", "cat_transport": "Transport", "cat_fun": "Fun", 
-        "cat_bad": "Bad (alcohol/smokes)", "cat_other": "Other",
-        "save": "Save", "delete": "Delete", "total": "Total spent:",
+        "habit_name": "Habit name...", "note_title": "Title", "note_text": "Note text...",
+        "expense_name": "What for?", "expense_amount": "Amount",
+        "income_name": "Source of income?", "income_amount": "Amount",
+        "type_income": "Income", "type_expense": "Expense",
+        "cat_food": "Food", "cat_transport": "Transport", "cat_fun": "Fun", 
+        "cat_bad": "Bad habits", "cat_other": "Other", "cat_salary": "Salary", "cat_gift": "Gift",
+        "save": "Add", "delete": "Delete", "balance": "Balance:",
+        "top_cat": "Most spent on:",
         "about_me": "Beginner coder, doing what I love",
-        "tg_channel": "Telegram channel:", "tg_dm": "Contact (DM):", "gh": "GitHub:"
+        "tg_channel": "Telegram channel:", "tg_dm": "Contact (DM):", "gh": "GitHub:",
+        "copy_logs": "Copy logs for developer", "logs_copied": "Logs copied! Send them to the developer."
     }
 }
 
 THEMES = {
-    "dark": {"bg": ft.Colors.SURFACE, "accent": ft.Colors.PURPLE_400, "card": ft.Colors.SURFACE_CONTAINER_HIGHEST},
-    "light": {"bg": ft.Colors.WHITE, "accent": ft.Colors.PURPLE_700, "card": ft.Colors.GREY_200},
-    "purple": {"bg": ft.Colors.DEEP_PURPLE_900, "accent": ft.Colors.PURPLE_200, "card": ft.Colors.DEEP_PURPLE_800},
-    "forest": {"bg": ft.Colors.GREEN_900, "accent": ft.Colors.LIGHT_GREEN_400, "card": ft.Colors.GREEN_800}
+    "dark": {"bg": ft.Colors.SURFACE, "card": ft.Colors.SURFACE_CONTAINER_HIGHEST},
+    "light": {"bg": ft.Colors.WHITE, "card": ft.Colors.GREY_200},
+    "purple": {"bg": ft.Colors.DEEP_PURPLE_900, "card": ft.Colors.DEEP_PURPLE_800},
+    "forest": {"bg": ft.Colors.GREEN_900, "card": ft.Colors.GREEN_800}
 }
 
 def main(page: ft.Page):
@@ -63,14 +70,23 @@ def main(page: ft.Page):
     
     def add_habit(e):
         if habit_input.value:
-            state["habits"].append({"name": habit_input.value, "done": False})
+            state["habits"].append({"name": habit_input.value, "last_done": "", "streak": 0, "date": datetime.datetime.now().strftime("%d.%m")})
             habit_input.value = ""
             update_habits_ui()
             save_data()
             page.update()
 
     def toggle_habit(index):
-        state["habits"][index]["done"] = not state["habits"][index]["done"]
+        h = state["habits"][index]
+        today = datetime.datetime.now().strftime("%Y-%m-%d")
+        
+        if h["last_done"] == today:
+            h["last_done"] = ""
+            h["streak"] = max(0, h["streak"] - 1)
+        else:
+            h["last_done"] = today
+            h["streak"] += 1
+            
         update_habits_ui()
         save_data()
         page.update()
@@ -83,12 +99,19 @@ def main(page: ft.Page):
 
     def update_habits_ui():
         habits_col.controls.clear()
+        today = datetime.datetime.now().strftime("%Y-%m-%d")
+        
         for i, h in enumerate(state["habits"]):
+            is_done = (h["last_done"] == today)
             habits_col.controls.append(
                 ft.Row([
-                    ft.Checkbox(value=h["done"], on_change=lambda e, i=i: toggle_habit(i)),
-                    ft.Text(h["name"], size=16, expand=True, color=ft.Colors.GREY_300 if h["done"] else ft.Colors.WHITE),
-                    ft.IconButton(ft.Icons.DELETE, icon_color=ft.Colors.RED_400, on_click=lambda e, i=i: delete_habit(i))
+                    ft.Checkbox(value=is_done, on_change=lambda e, i=i: toggle_habit(i)),
+                    ft.Column([
+                        ft.Text(h["name"], size=16, color=ft.Colors.GREY_300 if is_done else ft.Colors.WHITE),
+                        ft.Text(f'Создано: {h["date"]}', size=10, color=ft.Colors.GREY_500)
+                    ], expand=True),
+                    ft.Text(f'🔥 {h["streak"]}', size=14, color=ft.Colors.ORANGE_400),
+                    ft.IconButton(ft.Icons.DELETE, icon_size=16, icon_color=ft.Colors.RED_400, on_click=lambda e, i=i: delete_habit(i))
                 ])
             )
 
@@ -105,7 +128,10 @@ def main(page: ft.Page):
 
     def add_note(e):
         if note_title_input.value or note_text_input.value:
-            state["notes"].append({"title": note_title_input.value, "text": note_text_input.value})
+            state["notes"].append({
+                "title": note_title_input.value, "text": note_text_input.value,
+                "date": datetime.datetime.now().strftime("%d.%m %H:%M")
+            })
             note_title_input.value = ""
             note_text_input.value = ""
             update_notes_ui()
@@ -120,13 +146,15 @@ def main(page: ft.Page):
 
     def update_notes_ui():
         notes_col.controls.clear()
-        for i, n in enumerate(state["notes"]):
+        for i, n in enumerate(reversed(state["notes"])):
+            real_index = len(state["notes"]) - 1 - i
             notes_col.controls.append(
                 ft.Container(
                     content=ft.Column([
                         ft.Row([
                             ft.Text(n["title"], size=16, weight=ft.FontWeight.BOLD, expand=True),
-                            ft.IconButton(ft.Icons.DELETE, icon_size=16, icon_color=ft.Colors.RED_400, on_click=lambda e, i=i: delete_note(i))
+                            ft.Text(n["date"], size=12, color=ft.Colors.GREY_500),
+                            ft.IconButton(ft.Icons.DELETE, icon_size=16, icon_color=ft.Colors.RED_400, on_click=lambda e, i=real_index: delete_note(i))
                         ]),
                         ft.Text(n["text"], size=14, color=ft.Colors.GREY_400)
                     ]),
@@ -145,10 +173,20 @@ def main(page: ft.Page):
 
     # --- ВКЛАДКА 3: ФИНАНСЫ ---
     finance_col = ft.Column(spacing=10)
-    total_text = ft.Text(f"{TEXTS[state['lang']]['total']} 0 ₽", size=20, weight=ft.FontWeight.BOLD, color=ft.Colors.GREEN_400)
+    balance_text = ft.Text(f"{TEXTS[state['lang']]['balance']} 0 ₽", size=20, weight=ft.FontWeight.BOLD, color=ft.Colors.GREEN_400)
+    top_cat_text = ft.Text("", size=12, color=ft.Colors.GREY_400)
     
     exp_name_input = ft.TextField(hint_text=TEXTS[state["lang"]]["expense_name"])
     exp_amount_input = ft.TextField(hint_text=TEXTS[state["lang"]]["expense_amount"], keyboard_type=ft.KeyboardType.NUMBER)
+    
+    type_radio = ft.RadioGroup(
+        content=ft.Row([
+            ft.Radio(value="expense", label=TEXTS[state["lang"]]["type_expense"]),
+            ft.Radio(value="income", label=TEXTS[state["lang"]]["type_income"]),
+        ]),
+        value="expense"
+    )
+    
     exp_category = ft.Dropdown(
         options=[
             ft.dropdown.Option(TEXTS[state["lang"]]["cat_food"]),
@@ -156,6 +194,8 @@ def main(page: ft.Page):
             ft.dropdown.Option(TEXTS[state["lang"]]["cat_fun"]),
             ft.dropdown.Option(TEXTS[state["lang"]]["cat_bad"]),
             ft.dropdown.Option(TEXTS[state["lang"]]["cat_other"]),
+            ft.dropdown.Option(TEXTS[state["lang"]]["cat_salary"]),
+            ft.dropdown.Option(TEXTS[state["lang"]]["cat_gift"]),
         ],
         value=TEXTS[state["lang"]]["cat_food"]
     )
@@ -166,9 +206,13 @@ def main(page: ft.Page):
         except:
             return
         if amount > 0:
+            is_income = (type_radio.value == "income")
             state["expenses"].append({
-                "name": exp_name_input.value, "amount": amount, "cat": exp_category.value,
-                "date": datetime.datetime.now().strftime("%d.%m")
+                "name": exp_name_input.value, 
+                "amount": amount if not is_income else -amount,
+                "cat": exp_category.value,
+                "date": datetime.datetime.now().strftime("%d.%m"),
+                "is_income": is_income
             })
             exp_name_input.value = ""
             exp_amount_input.value = ""
@@ -184,33 +228,72 @@ def main(page: ft.Page):
 
     def update_finance_ui():
         finance_col.controls.clear()
-        total = sum(item["amount"] for item in state["expenses"])
-        total_text.value = f"{TEXTS[state['lang']]['total']} {total:.2f} ₽"
+        balance = sum(item["amount"] for item in state["expenses"])
+        balance_text.value = f"{TEXTS[state['lang']]['balance']} {balance:.2f} ₽"
         
+        if balance < 0:
+            balance_text.color = ft.Colors.GREEN_400
+        else:
+            balance_text.color = ft.Colors.WHITE if balance == 0 else ft.Colors.RED_400
+
+        expenses_only = [item for item in state["expenses"] if not item.get("is_income", False)]
+        if expenses_only:
+            cats = {}
+            for item in expenses_only:
+                cats[item["cat"]] = cats.get(item["cat"], 0) + item["amount"]
+            top_cat = max(cats, key=cats.get)
+            top_cat_text.value = f"{TEXTS[state['lang']]['top_cat']} {top_cat}"
+        else:
+            top_cat_text.value = ""
+
         for i, item in enumerate(reversed(state["expenses"])):
             real_index = len(state["expenses"]) - 1 - i
+            is_inc = item.get("is_income", False)
+            color = ft.Colors.GREEN_400 if is_inc else ft.Colors.RED_400
+            prefix = "+" if is_inc else "-"
+            
             finance_col.controls.append(
                 ft.Row([
                     ft.Column([
                         ft.Text(item["name"], size=14, weight=ft.FontWeight.BOLD),
                         ft.Text(f'{item["cat"]} • {item["date"]}', size=12, color=ft.Colors.GREY_400)
                     ], expand=True),
-                    ft.Text(f"-{item['amount']} ₽", size=14, color=ft.Colors.RED_400),
+                    ft.Text(f"{prefix}{abs(item['amount'])} ₽", size=14, color=color),
                     ft.IconButton(ft.Icons.DELETE, icon_size=16, icon_color=ft.Colors.RED_400, on_click=lambda e, i=real_index: delete_expense(i))
                 ])
             )
 
     tab_finance = ft.Column([
         ft.Text("💰 Финансы", size=24, weight=ft.FontWeight.BOLD),
-        total_text,
+        balance_text,
+        top_cat_text,
+        ft.Divider(),
         exp_name_input,
         ft.Row([exp_amount_input, exp_category]),
+        type_radio,
         ft.Button(TEXTS[state["lang"]]["save"], on_click=add_expense, bgcolor=ft.Colors.GREEN_600, color=ft.Colors.WHITE),
         ft.Divider(),
         finance_col
     ], scroll=ft.ScrollMode.AUTO, expand=True)
 
-    # --- ВКЛАДКА 4: ИНФО ---
+    # --- ВКЛАДКА 4: ИНФО + ЛОГИ ---
+    async def copy_logs(e):
+        sys_info = (
+            f"--- LifeTrack Logs ---\n"
+            f"Date: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+            f"OS: {platform.system()} {platform.release()}\n"
+            f"Python: {platform.python_version()}\n"
+            f"Processor: {platform.processor()}\n"
+            f"Lang: {state['lang']}, Theme: {state['theme']}\n"
+            f"Habits: {len(state['habits'])}, Notes: {len(state['notes'])}, Expenses: {len(state['expenses'])}\n"
+            f"----------------------\n"
+            "Скопируйте этот текст и отправьте разработчику."
+        )
+        await ft.Clipboard().set(sys_info)
+        page.snack_bar = ft.SnackBar(content=ft.Text(TEXTS[state["lang"]]["logs_copied"], color=ft.Colors.WHITE), bgcolor=ft.Colors.GREEN_800)
+        page.snack_bar.open = True
+        page.update()
+
     tab_info = ft.Column([
         ft.Icon(ft.Icons.PERSON, size=80),
         ft.Text("Евгений (makas)", size=22, weight=ft.FontWeight.BOLD),
@@ -224,6 +307,14 @@ def main(page: ft.Page):
         ft.Divider(height=10, color="transparent"),
         ft.Text(TEXTS[state["lang"]]["gh"], size=14, color=ft.Colors.GREY_500),
         ft.Text("https://github.com/makas-innnn", size=16, color=ft.Colors.BLUE_400, weight=ft.FontWeight.BOLD),
+        ft.Divider(height=20, color="transparent"),
+        ft.Button(
+            TEXTS[state["lang"]]["copy_logs"], 
+            icon=ft.Icons.BUG_REPORT, 
+            on_click=lambda e: page.run_task(copy_logs, e), 
+            bgcolor=ft.Colors.GREY_700, 
+            color=ft.Colors.WHITE
+        ),
     ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, scroll=ft.ScrollMode.AUTO, expand=True)
 
     # --- НАВИГАЦИЯ ---
