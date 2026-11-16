@@ -1,0 +1,15 @@
+[project]
+name = "LifeTrack"
+version = "1.0.0"
+description = "Трекер привычек, заметок и финансов"
+authors = [
+  {name = "makas-innnn", email = "makas@example.com"}
+]
+dependencies = [
+  "flet"
+]
+
+[tool.flet]
+org = "com.makas"
+product = "LifeTrack"
+build_number = 1
